@@ -3,8 +3,16 @@ import os
 import time
 import boto3
 import logging
+import decimal
 from aws_xray_sdk.core import patch_all
 from botocore.exceptions import ClientError
+
+# Helper class to convert Decimal to float for JSON serialization
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
 
 # Configure logging
 logger = logging.getLogger()
@@ -100,7 +108,7 @@ def lambda_handler(event, context):
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps(order_data)
+                'body': json.dumps(order_data, cls=DecimalEncoder)
             }
         else:
             return {

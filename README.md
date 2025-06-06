@@ -66,7 +66,7 @@ The demo implements a simple serverless order processing system with these compo
 
 ```bash
 sam build
-sam deploy --guided
+sam deploy --guided --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE>
 ```
 
 Follow the prompts to complete the deployment.
@@ -164,10 +164,15 @@ This demo illustrates key aspects of the AWS Well-Architected Framework:
 - **Security**: Proper IAM permissions and secure API endpoints
 - **Cost Optimization**: Serverless architecture with pay-per-use pricing
 
+## Ideas of improvements
+
+- Store non validated orders into another DynamoDB table
+- Write validated orders into an SQS queue and have Order Processing Lambda function read from it
+
 ## Clean Up
 
 To avoid incurring charges, delete the resources when you're done:
 
 ```bash
-sam delete
+sam delete --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE>
 ```

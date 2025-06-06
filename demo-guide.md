@@ -7,7 +7,7 @@ This guide provides step-by-step instructions for presenting the Serverless Orde
 1. Deploy the application using SAM CLI:
    ```bash
    sam build
-   sam deploy --guided
+   sam deploy --guided --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE>
    ```
 
 2. Note the API Gateway endpoint URL from the outputs.
@@ -18,13 +18,27 @@ This guide provides step-by-step instructions for presenting the Serverless Orde
    - CloudWatch Logs
    - CloudWatch Alarms
 
+4. Add an email subscription to the demo SNS topic to receive notifications
+   - Go to SNS, 
+   - Choose the lab topic
+   - Choose tab `Subscriptions`
+   - Click on `Create subscription`
+   - On Details / Protocol, choose: `Email`
+   - In `Endpoint` input field, add your email
+   - Click on `Create subscription`
+   - Go to your email inbox
+   - Validate the subscription
+
 ## Demo Script
 
 ### Introduction (2 minutes)
 
 "Today we're going to explore how to implement comprehensive observability in a serverless architecture. We'll see how to use AWS services to gain insights into application performance, detect issues, and troubleshoot problems."
 
-Show the architecture diagram and explain the components:
+![Architecture diagram](resources/serverless-observability-architecture.png)
+
+👉 Check [architecture details](./architecture-components.md)
+
 - API Gateway for REST endpoints
 - Three Lambda functions for different stages of order processing
 - DynamoDB for data storage
@@ -40,7 +54,11 @@ Show the architecture diagram and explain the components:
    ./test-orders.sh <api-endpoint> 20 1
    ```
 
-2. Explain that this script:
+   ```PowerShell
+   .\test-orders.ps1 -ApiEndpoint <api-endpoint> -NumOrders 20 -DelaySeconds 1
+   ```
+
+2. This script:
    - Sends both valid and invalid orders
    - Checks status for some orders
    - Creates a realistic traffic pattern

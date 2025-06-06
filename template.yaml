@@ -66,6 +66,7 @@ Resources:
 
   OrderValidatorFunction:
     Type: AWS::Serverless::Function
+    DependsOn: OrderProcessorFunction
     Properties:
       FunctionName: !Sub SnapLambda-OrderValidator-${Environment}
       CodeUri: functions/validator/
@@ -74,6 +75,10 @@ Resources:
       Policies:
         - SNSPublishMessagePolicy:
             TopicName: !GetAtt OrderNotificationTopic.TopicName
+        - CloudWatchPutMetricPolicy: {}
+# TODO 1: Uncomment to enable lambdaInvoke on OrderProcessorFunction
+#        - LambdaInvokePolicy:
+#            FunctionName: !Ref OrderProcessorFunction
       Events:
         ApiEvent:
           Type: Api
@@ -94,6 +99,15 @@ Resources:
             TableName: !Ref OrdersTable
         - SNSPublishMessagePolicy:
             TopicName: !GetAtt OrderNotificationTopic.TopicName
+        - CloudWatchPutMetricPolicy: {}
+
+# TODO 2: Comment the following policy to remove the deny dynamodb:PutItem
+        - Version: '2012-10-17'
+          Statement:
+            - Sid: DenyDynamoDBPutItem
+              Effect: Deny
+              Action: dynamodb:PutItem
+              Resource: !GetAtt OrdersTable.Arn
 
   OrderStatusFunction:
     Type: AWS::Serverless::Function
@@ -105,6 +119,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref OrdersTable
+# TODO 3: Uncomment to enable OrderStatusFunction to put custom metrics to CloudWatch
+#        - CloudWatchPutMetricPolicy: {}
       Events:
         ApiEvent:
           Type: Api
@@ -141,7 +157,7 @@ Resources:
       Dimensions:
         - Name: ApiName
           Value: !Ref OrdersApi
-      Statistic: p95
+      ExtendedStatistic: p95
       Period: 60
       EvaluationPeriods: 3
       Threshold: 1000
@@ -266,8 +282,15 @@ Resources:
           ]
         }
 
+  OrderProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${OrderProcessorFunction}
+      RetentionInDays: 7
+
   OrderProcessorErrorMetricFilter:
     Type: AWS::Logs::MetricFilter
+    DependsOn: OrderProcessorLogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${OrderProcessorFunction}
       FilterPattern: '{ $.level = "ERROR" }'

@@ -55,7 +55,7 @@ function Generate-Order {
 # Send orders
 for ($i = 1; $i -le $NumOrders; $i++) {
     $order = Generate-Order
-    Write-Host "Sending order $i: $order"
+    Write-Host "Sending order ${i}: $order"
     
     $response = Invoke-RestMethod -Uri "$ApiEndpoint/order" -Method Post -Body $order -ContentType "application/json" -ErrorAction SilentlyContinue
     
