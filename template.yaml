@@ -1,0 +1,291 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SnapLambda Observability Demo - Serverless Order Processing System
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: python3.11
+    Tracing: Active
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        ORDERS_TABLE: !Ref OrdersTable
+        NOTIFICATION_TOPIC: !Ref OrderNotificationTopic
+    Tags:
+      Project: SnapLambda
+      Demo: Observability
+
+Resources:
+  OrdersApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          MetricsEnabled: true
+          DataTraceEnabled: true
+          LoggingLevel: INFO
+      AccessLogSetting:
+        DestinationArn: !GetAtt OrdersApiLogGroup.Arn
+        Format: '{"requestId":"$context.requestId", "ip":"$context.identity.sourceIp", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "path":"$context.path", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength", "integrationLatency":"$context.integrationLatency", "responseLatency":"$context.responseLatency"}'
+
+  OrdersApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/OrdersApi-${Environment}
+      RetentionInDays: 7
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub SnapLambda-Orders-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  OrderNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub SnapLambda-Notifications-${Environment}
+      DisplayName: SnapLambda Order Notifications
+
+  OrderValidatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub SnapLambda-OrderValidator-${Environment}
+      CodeUri: functions/validator/
+      Handler: app.lambda_handler
+      Description: Validates incoming order requests
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt OrderNotificationTopic.TopicName
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref OrdersApi
+            Path: /order
+            Method: POST
+
+  OrderProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub SnapLambda-OrderProcessor-${Environment}
+      CodeUri: functions/processor/
+      Handler: app.lambda_handler
+      Description: Processes valid orders and stores in DynamoDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt OrderNotificationTopic.TopicName
+
+  OrderStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub SnapLambda-OrderStatus-${Environment}
+      CodeUri: functions/status/
+      Handler: app.lambda_handler
+      Description: Retrieves order status from DynamoDB
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrdersTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref OrdersApi
+            Path: /order/{orderId}
+            Method: GET
+
+  OrderErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub SnapLambda-OrderErrors-${Environment}
+      AlarmDescription: Alarm when order processing errors exceed threshold
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OrderProcessorFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 2
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref OrderNotificationTopic
+
+  ApiLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub SnapLambda-ApiLatency-${Environment}
+      AlarmDescription: Alarm when API latency exceeds threshold
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref OrdersApi
+      Statistic: p95
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref OrderNotificationTopic
+
+  ObservabilityDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub SnapLambda-Observability-${Environment}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${OrderValidatorFunction}" ],
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${OrderProcessorFunction}" ],
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${OrderStatusFunction}" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Invocations",
+                "period": 60
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${OrderValidatorFunction}" ],
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${OrderProcessorFunction}" ],
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${OrderStatusFunction}" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Errors",
+                "period": 60
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "${OrdersApi}" ],
+                  [ "AWS/ApiGateway", "4XXError", "ApiName", "${OrdersApi}" ],
+                  [ "AWS/ApiGateway", "5XXError", "ApiName", "${OrdersApi}" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Requests",
+                "period": 60
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Latency", "ApiName", "${OrdersApi}", { "stat": "Average" } ],
+                  [ "AWS/ApiGateway", "Latency", "ApiName", "${OrdersApi}", { "stat": "p95" } ],
+                  [ "AWS/ApiGateway", "Latency", "ApiName", "${OrdersApi}", { "stat": "p99" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Latency",
+                "period": 60
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${OrdersTable}" ],
+                  [ "AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${OrdersTable}" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity Consumption",
+                "period": 60
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/SnapLambda-OrderProcessor-${Environment}' | filter level = 'ERROR' | stats count() by bin(30s)",
+                "region": "${AWS::Region}",
+                "title": "Order Processing Errors",
+                "view": "timeSeries"
+              }
+            }
+          ]
+        }
+
+  OrderProcessorErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${OrderProcessorFunction}
+      FilterPattern: '{ $.level = "ERROR" }'
+      MetricTransformations:
+        - MetricName: OrderProcessingErrors
+          MetricNamespace: SnapLambda
+          MetricValue: '1'
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${OrdersApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+  OrdersTable:
+    Description: DynamoDB table for orders
+    Value: !Ref OrdersTable
+  NotificationTopic:
+    Description: SNS topic for notifications
+    Value: !Ref OrderNotificationTopic
+  Dashboard:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ObservabilityDashboard}
