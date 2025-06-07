@@ -57,17 +57,18 @@ def validate_order(order):
     # Check for required fields
     for field in required_fields:
         if field not in order:
-            logger.error(f"Validation failed: Missing required field '{field}'")
+            logger.error(f"Validation failed: Missing required field '{field}' - order_id {order.get('orderId')}")
             return False
     
     # Validate quantity is positive
     if not isinstance(order['quantity'], int) or order['quantity'] <= 0:
-        logger.error(f"Validation failed: Invalid quantity {order.get('quantity')}")
+        logger.error(f"Validation failed: Invalid quantity {order.get('quantity')} - order_id {order.get('orderId')}")
         return False
     
     # Simulate occasional validation failures (10%)
+    # TODO 1: remove or comment out this random test to fix troubleshooting case
     if random.random() < 0.1:
-        logger.error("Validation failed: Simulated random validation error")
+        logger.error(f"Validation failed: Simulated random validation error - order_id {order.get('orderId')}")
         return False
         
     return True

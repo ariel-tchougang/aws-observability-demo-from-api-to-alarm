@@ -1,5 +1,7 @@
 # Architecture Components
 
+![Architecture diagram](resources/serverless-observability-architecture.png)
+
 ## Main Components
 
 ### Client

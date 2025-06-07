@@ -3,10 +3,21 @@ Transform: AWS::Serverless-2016-10-31
 Description: SnapLambda Observability Demo - Serverless Order Processing System
 
 Parameters:
+  NotificationEmail:
+    Type: String
+    Default: serverless-observability-demo@mailinator.com
+    Description: Valid email address to receive order notifications
+    AllowedPattern: "^[a-zA-Z0-9_.-]+@[a-zA-Z0-9-]+.[a-zA-Z0-9-.]+$"
+
   Environment:
     Type: String
-    Default: dev
-    Description: Environment name (dev, test, prod)
+    Default: demo
+    Description: Environment name (demo, dev, test, prod)
+    AllowedValues:
+    - demo
+    - dev
+    - test
+    - prod
 
 Globals:
   Function:
@@ -64,6 +75,13 @@ Resources:
       TopicName: !Sub SnapLambda-Notifications-${Environment}
       DisplayName: SnapLambda Order Notifications
 
+  OrderNotificationEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref OrderNotificationTopic
+
   OrderValidatorFunction:
     Type: AWS::Serverless::Function
     DependsOn: OrderProcessorFunction
@@ -76,9 +94,9 @@ Resources:
         - SNSPublishMessagePolicy:
             TopicName: !GetAtt OrderNotificationTopic.TopicName
         - CloudWatchPutMetricPolicy: {}
-# TODO 1: Uncomment to enable lambdaInvoke on OrderProcessorFunction
-#        - LambdaInvokePolicy:
-#            FunctionName: !Ref OrderProcessorFunction
+# TODO 2: Uncomment to enable lambdaInvoke on OrderProcessorFunction
+#         - LambdaInvokePolicy:
+#             FunctionName: !Ref OrderProcessorFunction
       Events:
         ApiEvent:
           Type: Api
@@ -86,6 +104,12 @@ Resources:
             RestApiId: !Ref OrdersApi
             Path: /order
             Method: POST
+
+  OrderValidatorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${OrderValidatorFunction}
+      RetentionInDays: 7
 
   OrderProcessorFunction:
     Type: AWS::Serverless::Function
@@ -100,14 +124,19 @@ Resources:
         - SNSPublishMessagePolicy:
             TopicName: !GetAtt OrderNotificationTopic.TopicName
         - CloudWatchPutMetricPolicy: {}
-
-# TODO 2: Comment the following policy to remove the deny dynamodb:PutItem
+# TODO 3: Comment or remove the following policy to remove the deny dynamodb:PutItem
         - Version: '2012-10-17'
           Statement:
             - Sid: DenyDynamoDBPutItem
               Effect: Deny
               Action: dynamodb:PutItem
               Resource: !GetAtt OrdersTable.Arn
+
+  OrderProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${OrderProcessorFunction}
+      RetentionInDays: 7
 
   OrderStatusFunction:
     Type: AWS::Serverless::Function
@@ -119,8 +148,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref OrdersTable
-# TODO 3: Uncomment to enable OrderStatusFunction to put custom metrics to CloudWatch
-#        - CloudWatchPutMetricPolicy: {}
+# TODO 4: Uncomment to enable OrderStatusFunction to put custom metrics to CloudWatch
+#         - CloudWatchPutMetricPolicy: {}
       Events:
         ApiEvent:
           Type: Api
@@ -128,6 +157,12 @@ Resources:
             RestApiId: !Ref OrdersApi
             Path: /order/{orderId}
             Method: GET
+
+  OrderStatusLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${OrderStatusFunction}
+      RetentionInDays: 7
 
   OrderErrorAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -281,12 +316,6 @@ Resources:
             }
           ]
         }
-
-  OrderProcessorLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub /aws/lambda/${OrderProcessorFunction}
-      RetentionInDays: 7
 
   OrderProcessorErrorMetricFilter:
     Type: AWS::Logs::MetricFilter

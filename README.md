@@ -50,6 +50,8 @@ The demo implements a simple serverless order processing system with these compo
    - Service maps
    - Latency analysis
 
+---
+
 ## Deployment Instructions
 
 ### Prerequisites
@@ -64,16 +66,38 @@ The demo implements a simple serverless order processing system with these compo
 2. Navigate to the project directory
 3. Deploy using SAM CLI:
 
+* **Build your project**
+
 ```bash
 sam build
-sam deploy --guided --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE>
 ```
 
-Follow the prompts to complete the deployment.
+* **Deploy (with default parameters) using SAM**
 
-## Testing the Application
+```bash
+sam deploy
+```
 
-👉 Check [step-by-step demo guide](./demo-guide.md)
+* **SAM deploy options**
+   * Use another AWS profile: `--profile <YOUR_AWS_PROFILE>`
+   * Set deployment region: `--region <YOUR_AWS_REGION>`
+   * Override template parameters: `--parameter-overrides Environment=<YOUR_ENVIRONMENT> NotificationEmail=<YOUR_EMAIL_ADDRESS>`
+
+* **Full build and deploy command example**
+
+```bash
+# To build your app
+sam build
+
+# To deploy with different parameters
+sam deploy --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE> --parameter-overrides Environment=<YOUR_ENVIRONMENT> NotificationEmail=<YOUR_EMAIL_ADDRESS>
+```
+
+👉 **Follow the prompts to complete the deployment.**
+
+---
+
+## Testing and troubleshooting the Application
 
 ### Submit an Order
 
@@ -95,64 +119,21 @@ curl -X GET \
   https://{api-id}.execute-api.{region}.amazonaws.com/{stage}/order/{orderId}
 ```
 
-## Observability Demo Walkthrough
+### Troubleshooting scenarios
 
-### 1. CloudWatch Metrics
+👉 Check [step-by-step troubleshooting with observability tools guide](./troubleshooting-guide.md)
 
-Navigate to CloudWatch > Metrics to observe:
+---
 
-- **Built-in metrics**: Lambda invocations, errors, duration
-- **Custom metrics**: Order validation rate, processing time
-- **API Gateway metrics**: Request count, latency, errors
+## Clean Up
 
-### 2. CloudWatch Logs
+To avoid incurring charges, delete the resources when you're done:
 
-Navigate to CloudWatch > Log groups to observe:
+```bash
+sam delete --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE>
+```
 
-- Structured logs from Lambda functions
-- Error patterns
-- Correlation with X-Ray trace IDs
-
-### 3. CloudWatch Metric Filters
-
-Navigate to CloudWatch > Log groups > Metric filters to observe:
-
-- Error rate extraction from logs
-- Custom metrics created from log patterns
-
-### 4. CloudWatch Alarms
-
-Navigate to CloudWatch > Alarms to observe:
-
-- Error rate alarms
-- Latency alarms
-- Alarm states and history
-
-### 5. X-Ray Traces
-
-Navigate to X-Ray > Traces to observe:
-
-- End-to-end request flow
-- Service map visualization
-- Latency breakdown by service
-- Error identification
-
-## Troubleshooting Scenarios
-
-### Scenario 1: High Error Rate
-
-1. Submit multiple invalid orders
-2. Observe error metrics increasing
-3. See alarms triggering
-4. Use X-Ray to identify the source of errors
-5. Correlate with logs for detailed error information
-
-### Scenario 2: Performance Degradation
-
-1. Submit many orders in quick succession
-2. Observe latency metrics
-3. Use X-Ray to identify bottlenecks
-4. Check CloudWatch Logs for any warnings or errors
+---
 
 ## Well-Architected Framework Connection
 
@@ -164,15 +145,26 @@ This demo illustrates key aspects of the AWS Well-Architected Framework:
 - **Security**: Proper IAM permissions and secure API endpoints
 - **Cost Optimization**: Serverless architecture with pay-per-use pricing
 
-## Ideas of improvements
+These practices help us build resilient, high-performing applications that meet business requirements."
+
+---
+
+## What's next?
+
+### Ideas of improvements
 
 - Store non validated orders into another DynamoDB table
 - Write validated orders into an SQS queue and have Order Processing Lambda function read from it
 
-## Clean Up
+### Additional knowledge
+After this demo, you may seek further knowledge about:
+- Implementation details
+- Best practices for observability
+- Cost considerations
+- Scaling observability for larger applications
 
-To avoid incurring charges, delete the resources when you're done:
-
-```bash
-sam delete --region <YOUR_AWS_REGION> --profile <YOUR_AWS_PROFILE>
-```
+### Additional Resources
+- [AWS X-Ray Documentation](https://docs.aws.amazon.com/xray/latest/devguide/aws-xray.html)
+- [CloudWatch Logs Documentation](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html)
+- [CloudWatch Metrics Documentation](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/working_with_metrics.html)
+- [AWS Lambda Permissions](https://docs.aws.amazon.com/lambda/latest/dg/lambda-permissions.html)

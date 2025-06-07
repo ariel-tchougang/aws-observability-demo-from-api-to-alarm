@@ -14,9 +14,9 @@ lint = true
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 s3_prefix = "serverless-observability-demo"
-confirm_changeset = false
+confirm_changeset = true
 resolve_s3 = true
-parameter_overrides = "Environment=\"dev\""
+# parameter_overrides = "Environment=\"demo\" NotificationEmail=\"serverless-observability-demo@mailinator.com\""
 
 [default.package.parameters]
 resolve_s3 = true
