@@ -2,9 +2,9 @@ import json
 import os
 import random
 import uuid
-import boto3
+import boto3 # type: ignore
 import logging
-from aws_xray_sdk.core import patch_all
+from aws_xray_sdk.core import patch_all # type: ignore
 import time
 
 # Configure logging

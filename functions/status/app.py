@@ -1,11 +1,11 @@
 import json
 import os
 import time
-import boto3
+import boto3 # type: ignore
 import logging
 import decimal
-from aws_xray_sdk.core import patch_all
-from botocore.exceptions import ClientError
+from aws_xray_sdk.core import patch_all # type: ignore
+from botocore.exceptions import ClientError # type: ignore
 
 # Helper class to convert Decimal to float for JSON serialization
 class DecimalEncoder(json.JSONEncoder):
