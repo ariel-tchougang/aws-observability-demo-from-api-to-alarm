@@ -5,26 +5,23 @@ import time
 import boto3 # type: ignore
 import logging
 from aws_xray_sdk.core import patch_all # type: ignore
-from datetime import datetime
+from datetime import datetime, timezone
 
-# Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize X-Ray tracing
 patch_all()
 
-# Initialize clients
 dynamodb = boto3.resource('dynamodb')
 sns = boto3.client('sns')
 cloudwatch = boto3.client('cloudwatch')
 
-# Environment variables
 ORDERS_TABLE = os.environ.get('ORDERS_TABLE')
 NOTIFICATION_TOPIC = os.environ.get('NOTIFICATION_TOPIC')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 
-def publish_metrics(status, processing_time):
+def publish_metrics(status, processing_time_millis):
     """Publish custom metrics to CloudWatch"""
     try:
         cloudwatch.put_metric_data(
@@ -44,7 +41,7 @@ def publish_metrics(status, processing_time):
                     'Dimensions': [
                         {'Name': 'Environment', 'Value': ENVIRONMENT}
                     ],
-                    'Value': processing_time,
+                    'Value': processing_time_millis,
                     'Unit': 'Milliseconds'
                 }
             ]
@@ -64,11 +61,9 @@ def process_order(order):
         return False, "Processing error"
     
     try:
-        # Add additional order information
         order['status'] = 'PROCESSED'
-        order['processedAt'] = datetime.utcnow().isoformat()
+        order['processedAt'] = datetime.now(timezone.utc).isoformat()
         
-        # Store in DynamoDB
         table = dynamodb.Table(ORDERS_TABLE)
         table.put_item(Item=order)
         
@@ -85,18 +80,14 @@ def lambda_handler(event, context):
     logger.info(f"Received order for processing: {event}")
     
     try:
-        # Process the order
         success, error_message = process_order(event)
         
-        # Calculate processing time
-        processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        processing_time_millis = (time.time() - start_time) * 1000
         
-        # Publish custom metrics
         status = 'Success' if success else 'Failed'
-        publish_metrics(status, processing_time)
+        publish_metrics(status, processing_time_millis)
         
         if success:
-            # Send success notification
             if NOTIFICATION_TOPIC:
                 sns.publish(
                     TopicArn=NOTIFICATION_TOPIC,
@@ -114,7 +105,6 @@ def lambda_handler(event, context):
         else:
             logger.error(f"Order processing failed: {error_message}")
             
-            # Send failure notification
             if NOTIFICATION_TOPIC:
                 sns.publish(
                     TopicArn=NOTIFICATION_TOPIC,
@@ -134,7 +124,6 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"Error in order processor: {str(e)}", exc_info=True)
         
-        # Publish error metric
         cloudwatch.put_metric_data(
             Namespace='SnapLambda',
             MetricData=[{

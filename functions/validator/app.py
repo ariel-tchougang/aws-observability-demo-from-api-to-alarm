@@ -7,22 +7,19 @@ import logging
 from aws_xray_sdk.core import patch_all # type: ignore
 import time
 
-# Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize X-Ray tracing
 patch_all()
 
-# Initialize clients
 sns = boto3.client('sns')
 cloudwatch = boto3.client('cloudwatch')
 
-# Environment variables
 NOTIFICATION_TOPIC = os.environ.get('NOTIFICATION_TOPIC')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 
-def publish_metrics(is_valid, processing_time):
+def publish_metrics(is_valid, processing_time_millis):
     """Publish custom metrics to CloudWatch"""
     try:
         cloudwatch.put_metric_data(
@@ -42,7 +39,7 @@ def publish_metrics(is_valid, processing_time):
                     'Dimensions': [
                         {'Name': 'Environment', 'Value': ENVIRONMENT}
                     ],
-                    'Value': processing_time,
+                    'Value': processing_time_millis,
                     'Unit': 'Milliseconds'
                 }
             ]
@@ -54,13 +51,11 @@ def validate_order(order):
     """Validate the order data"""
     required_fields = ['customerName', 'productId', 'quantity']
     
-    # Check for required fields
     for field in required_fields:
         if field not in order:
             logger.error(f"Validation failed: Missing required field '{field}' - order_id {order.get('orderId')}")
             return False
     
-    # Validate quantity is positive
     if not isinstance(order['quantity'], int) or order['quantity'] <= 0:
         logger.error(f"Validation failed: Invalid quantity {order.get('quantity')} - order_id {order.get('orderId')}")
         return False
@@ -80,29 +75,23 @@ def lambda_handler(event, context):
     logger.info(f"Received order validation request: {event}")
     
     try:
-        # Parse the request body
         if 'body' in event:
             body = json.loads(event['body'])
         else:
             body = event
             
-        # Generate a unique order ID
         order_id = str(uuid.uuid4())
         body['orderId'] = order_id
         
-        # Validate the order
         is_valid = validate_order(body)
         
-        # Calculate processing time
-        processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        processing_time_millis = (time.time() - start_time) * 1000
         
-        # Publish custom metrics
-        publish_metrics(is_valid, processing_time)
+        publish_metrics(is_valid, processing_time_millis)
         
         if is_valid:
             logger.info(f"Order {order_id} validated successfully")
             
-            # Forward valid order to the processor
             lambda_client = boto3.client('lambda')
             lambda_client.invoke(
                 FunctionName=f"SnapLambda-OrderProcessor-{ENVIRONMENT}",
@@ -121,7 +110,6 @@ def lambda_handler(event, context):
         else:
             logger.warning(f"Order validation failed for request: {body}")
             
-            # Notify about invalid order
             if NOTIFICATION_TOPIC:
                 sns.publish(
                     TopicArn=NOTIFICATION_TOPIC,
@@ -141,7 +129,6 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"Error processing order: {str(e)}", exc_info=True)
         
-        # Publish error metric
         cloudwatch.put_metric_data(
             Namespace='SnapLambda',
             MetricData=[{

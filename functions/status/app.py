@@ -14,22 +14,19 @@ class DecimalEncoder(json.JSONEncoder):
             return float(obj)
         return super(DecimalEncoder, self).default(obj)
 
-# Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize X-Ray tracing
 patch_all()
 
-# Initialize clients
 dynamodb = boto3.resource('dynamodb')
 cloudwatch = boto3.client('cloudwatch')
 
-# Environment variables
 ORDERS_TABLE = os.environ.get('ORDERS_TABLE')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 
-def publish_metrics(status_found, processing_time):
+def publish_metrics(status_found, processing_time_millis):
     """Publish custom metrics to CloudWatch"""
     try:
         cloudwatch.put_metric_data(
@@ -49,7 +46,7 @@ def publish_metrics(status_found, processing_time):
                     'Dimensions': [
                         {'Name': 'Environment', 'Value': ENVIRONMENT}
                     ],
-                    'Value': processing_time,
+                    'Value': processing_time_millis,
                     'Unit': 'Milliseconds'
                 }
             ]
@@ -82,7 +79,6 @@ def lambda_handler(event, context):
     logger.info(f"Received order status request: {event}")
     
     try:
-        # Extract order ID from path parameters
         if 'pathParameters' in event and event['pathParameters'] and 'orderId' in event['pathParameters']:
             order_id = event['pathParameters']['orderId']
         else:
@@ -95,14 +91,11 @@ def lambda_handler(event, context):
                 })
             }
         
-        # Get order status
         found, order_data = get_order_status(order_id)
         
-        # Calculate processing time
-        processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        processing_time_millis = (time.time() - start_time) * 1000
         
-        # Publish custom metrics
-        publish_metrics(found, processing_time)
+        publish_metrics(found, processing_time_millis)
         
         if found:
             return {
@@ -122,7 +115,6 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"Error retrieving order status: {str(e)}", exc_info=True)
         
-        # Publish error metric
         cloudwatch.put_metric_data(
             Namespace='SnapLambda',
             MetricData=[{
